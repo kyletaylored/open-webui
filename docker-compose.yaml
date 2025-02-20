@@ -25,8 +25,10 @@ services:
     environment:
       - 'OLLAMA_BASE_URL=http://ollama:11434'
       - 'WEBUI_SECRET_KEY='
-    extra_hosts:
-      - host.docker.internal:host-gateway
+      - 'WEBUI_AUTH=${WEBUI_AUTH}'
+      - 'DD_TRACE_AGENT_URL=http://dd-agent:8126'
+      - 'DD_SERVICE=open-webui'
+      - 'DD_PROFILING_ENABLED=true'
     restart: unless-stopped
 
 volumes:
