@@ -76,6 +76,7 @@ usage() {
     echo "  --data[folder=PATH]        Bind mount for ollama data folder (by default will create the 'ollama' volume)."
     echo "  --build                    Build the docker image before running the compose project."
     echo "  --drop                     Drop the compose project."
+    echo "  --disable-datadog          Disable Datadog service."
     echo "  -q, --quiet                Run script in headless mode."
     echo "  -h, --help                 Show this help message."
     echo ""
@@ -129,6 +130,9 @@ while [[ $# -gt 0 ]]; do
             value=$(extract_value "$key")
             data_dir=${value:-"./ollama-data"}
             ;;
+        --disable-datadog)
+            disable_datadog=true
+            ;;
         --drop)
             kill_compose=true
             ;;
@@ -152,12 +156,31 @@ while [[ $# -gt 0 ]]; do
     shift # past argument or value
 done
 
+# Determine container runtime and set up environment
+CONTAINER_RUNTIME="docker"
+if command -v podman >/dev/null 2>&1; then
+    CONTAINER_RUNTIME="podman"
+    
+    # Get podman version and configure pasta networking for 5.3+
+    PODMAN_VERSION=$(podman version --format '{{.Version}}' 2>/dev/null)
+    if [[ $PODMAN_VERSION =~ ^5\.[3-9] || $PODMAN_VERSION =~ ^[6-9] ]]; then
+        echo "Detected Podman $PODMAN_VERSION - configuring pasta networking"
+        # Set environment variables for pasta networking
+        export PODMAN_USERNS=keep-id
+        export CONTAINERS_CONF_OVERRIDE="$(mktemp)"
+        cat > "$CONTAINERS_CONF_OVERRIDE" <<EOF
+[engine]
+network_cmd = "pasta"
+EOF
+    fi
+fi
+
 if [[ $kill_compose == true ]]; then
-    docker compose down --remove-orphans
+    $COMPOSE_CMD down --remove-orphans
     echo -e "${GREEN}${BOLD}Compose project dropped successfully.${NC}"
     exit
 else
-    DEFAULT_COMPOSE_COMMAND="docker compose -f docker-compose.yaml"
+    DEFAULT_COMPOSE_COMMAND="$CONTAINER_RUNTIME compose -f docker-compose.yaml"
     if [[ $enable_gpu == true ]]; then
         # Validate and process command-line arguments
         if [[ -n $gpu_count ]]; then
@@ -185,6 +208,9 @@ else
     if [[ -n $webui_port ]]; then
         export OPEN_WEBUI_PORT=$webui_port # Set OPEN_WEBUI_PORT environment variable
     fi
+    if [[ -z $disable_datadog ]]; then
+        DEFAULT_COMPOSE_COMMAND+=" -f docker-compose.datadog.yaml"
+    fi
     DEFAULT_COMPOSE_COMMAND+=" up -d"
     DEFAULT_COMPOSE_COMMAND+=" --remove-orphans"
     DEFAULT_COMPOSE_COMMAND+=" --force-recreate"
@@ -196,11 +222,14 @@ fi
 # Recap of environment variables
 echo
 echo -e "${WHITE}${BOLD}Current Setup:${NC}"
+echo -e "   ${GREEN}${BOLD}Container Runtime:${NC} $CONTAINER_RUNTIME${PODMAN_VERSION:+ ($PODMAN_VERSION)}"
 echo -e "   ${GREEN}${BOLD}GPU Driver:${NC} ${OLLAMA_GPU_DRIVER:-Not Enabled}"
 echo -e "   ${GREEN}${BOLD}GPU Count:${NC} ${OLLAMA_GPU_COUNT:-Not Enabled}"
 echo -e "   ${GREEN}${BOLD}WebAPI Port:${NC} ${OLLAMA_WEBAPI_PORT:-Not Enabled}"
 echo -e "   ${GREEN}${BOLD}Data Folder:${NC} ${data_dir:-Using ollama volume}"
 echo -e "   ${GREEN}${BOLD}WebUI Port:${NC} $webui_port"
+echo -e "   ${GREEN}${BOLD}Datadog:${NC} $(if [[ -z $disable_datadog ]]; then echo "Enabled"; else echo "Disabled"; fi)"
+echo -e "   ${GREEN}${BOLD}Build Image:${NC} $(if [[ $build_image == true ]]; then echo "True"; else echo "False"; fi)"
 echo
 
 if [[ $headless == true ]]; then
@@ -231,11 +260,18 @@ if [[ $choice == "" || $choice == "y" ]]; then
     # Check exit status
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}${BOLD}Compose project started successfully.${NC}"
+        # Clean up temporary file if it exists
+        [[ -f "$CONTAINERS_CONF_OVERRIDE" ]] && rm "$CONTAINERS_CONF_OVERRIDE"
     else
         echo -e "${RED}${BOLD}There was an error starting the compose project.${NC}"
+        # Clean up temporary file even on failure
+        [[ -f "$CONTAINERS_CONF_OVERRIDE" ]] && rm "$CONTAINERS_CONF_OVERRIDE"
+        exit 1
     fi
 else
     echo "Aborted."
+    # Clean up temporary file if it exists
+    [[ -f "$CONTAINERS_CONF_OVERRIDE" ]] && rm "$CONTAINERS_CONF_OVERRIDE"
 fi
 
 echo
