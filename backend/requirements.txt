@@ -108,3 +108,6 @@ google-cloud-storage==2.19.0
 
 ## LDAP
 ldap3==2.9.1
+
+## Datadog
+ddtrace~=2.20.1
