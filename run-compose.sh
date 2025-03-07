@@ -218,6 +218,8 @@ else
     fi
     if [[ -z $disable_datadog ]]; then
         DEFAULT_COMPOSE_COMMAND+=" -f docker-compose.datadog.yaml"
+        export GIT_COMMIT_SHA=$(git rev-parse HEAD)
+        export GIT_REPOSITORY_URL=$(git config --get remote.origin.url)
     fi
     DEFAULT_COMPOSE_COMMAND+=" up -d"
     DEFAULT_COMPOSE_COMMAND+=" --remove-orphans"
@@ -282,5 +284,3 @@ else
     # Clean up temporary file if it exists
     [[ -f "$CONTAINERS_CONF_OVERRIDE" ]] && rm "$CONTAINERS_CONF_OVERRIDE"
 fi
-
-echo

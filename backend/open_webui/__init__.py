@@ -1,3 +1,6 @@
+from ddtrace import patch_all
+patch_all()
+
 import base64
 import os
 import random

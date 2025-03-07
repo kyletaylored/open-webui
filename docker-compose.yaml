@@ -15,8 +15,8 @@ services:
       context: .
       args:
         OLLAMA_BASE_URL: '/ollama'
-        DD_GIT_REPOSITORY_URL: ${GIT_REPO_URL}
-        DD_GIT_COMMIT_SHA: ${GIT_COMMIT_SHA}
+        GIT_COMMIT_SHA: ${GIT_COMMIT_SHA}
+        GIT_REPOSITORY_URL: ${GIT_REPOSITORY_URL}
       dockerfile: Dockerfile
     image: ghcr.io/open-webui/open-webui:${WEBUI_DOCKER_TAG-main}
     container_name: open-webui
@@ -27,12 +27,13 @@ services:
     ports:
       - ${OPEN_WEBUI_PORT-3000}:8080
     environment:
-      - 'OLLAMA_BASE_URL=http://ollama:11434'
-      - 'WEBUI_SECRET_KEY='
-      - 'WEBUI_AUTH=${WEBUI_AUTH}'
-      - 'DD_TRACE_AGENT_URL=http://dd-agent:8126'
-      - 'DD_SERVICE=open-webui'
-      - 'DD_PROFILING_ENABLED=true'
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - WEBUI_SECRET_KEY=
+      - WEBUI_AUTH=${WEBUI_AUTH}
+      - DD_AGENT_HOST=dd-agent
+      - DD_SERVICE=open-webui
+      - DD_PROFILING_ENABLED=true
+      - DD_PROFILING_TIMELINE_ENABLED=true
     restart: unless-stopped
 
 volumes:
